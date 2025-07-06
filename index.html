@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İnteraktif Hikaye: Senin Maceran</title>
+  <style>
+    /* CSS KODU DEĞİŞMEDİ */
+    @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Lato:wght@400;700&display=swap');
+    :root { --transition-speed: 0.8s; }
+    body { font-family: 'Lato', sans-serif; background-color: #000; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
+    #background-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; z-index: -1; }
+    #story-image {
+        width: 100%; height: 100%; object-fit: cover;
+        opacity: 1; 
+        transition: opacity var(--transition-speed) ease-in-out;
+        animation: kenburns 25s infinite alternate;
+    }
+    @keyframes kenburns { from { transform: scale(1.1) translate(-2%, 2%); } to { transform: scale(1) translate(0, 0); } }
+    #vignette { position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-shadow: inset 0 0 150px rgba(0,0,0,0.8); }
+    #game { width: 100%; max-width: 800px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); border-radius: 15px; padding: 30px 40px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); z-index: 1; }
+    #start-screen { text-align: center; }
+    #start-screen h1 { font-family: 'Merriweather', serif; font-size: 2.5em; margin-bottom: 10px; }
+    #start-screen p { font-size: 1.2em; margin-bottom: 30px; color: #ccc; }
+    #story-text { font-family: 'Merriweather', serif; font-size: 1.4em; line-height: 1.7; margin-bottom: 25px; color: #fff; min-height: 120px; }
+    #choices { display: grid; grid-template-columns: 1fr; gap: 15px; opacity: 0; transition: opacity 0.5s ease-in-out; }
+    #input-container { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 600px) {
+        #choices { grid-template-columns: 1fr 1fr; }
+        #input-container { grid-template-columns: 2fr 1fr; }
+        #choices .choice-button:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - 7.5px); justify-self: center; text-align: center; }
+    }
+    .choice-button, #submit-name-button, #start-button {
+      display: block; box-sizing: border-box; background: rgba(255, 255, 255, 0.05); color: #c7c7c7;
+      border: 2px solid #555; padding: 15px 20px; font-size: 1em; border-radius: 8px; cursor: pointer;
+      font-weight: bold; transition: all 0.3s ease;
+    }
+    .choice-button { text-align: left; }
+    #submit-name-button, #start-button { text-align: center; }
+    #start-button { 
+        font-size: 1.2em; 
+        background-color: #4A4A4A; 
+        border-color: #666;
+        display: inline-block;
+    }
+    .choice-button:hover, #submit-name-button:hover, #start-button:hover { background: rgba(255, 255, 255, 0.1); color: white; border-color: #aaa; transform: translateY(-3px); }
+    #name-input { background: #121212; border: 2px solid #555; color: white; padding: 15px; border-radius: 8px; font-size: 1em; width: 100%; box-sizing: border-box; }
+    #mute-button {
+      position: fixed; top: 20px; right: 20px; font-size: 1.5em; cursor: pointer;
+      z-index: 10; padding: 10px; background-color: rgba(0,0,0,0.5); border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <div id="background-container">
+      <img id="story-image" src="https://images.unsplash.com/photo-1501630834273-4b5604d2ee31?q=80&w=2070" alt="Başlangıç görseli">
+      <div id="vignette"></div>
+  </div>
+  
+  <div id="mute-button">🔊</div>
+
+  <div id="game">
+    <div id="start-screen">
+      <h1 style="font-family: 'Merriweather', serif;">Seçimlerin Dünyası</h1>
+      <p>Her kararın bir sonuç doğurduğu bir maceraya hazır mısın?</p>
+      <button id="start-button">MACERAYA BAŞLA</button>
+    </div>
+    <div id="game-content" style="display: none;">
+        <div id="story-text"></div>
+        <div id="choices"></div>
+        <div id="input-container" style="display: none;">
+          <input type="text" id="name-input" placeholder="Adını buraya yaz...">
+          <button id="submit-name-button">Devam Et</button>
+        </div>
+    </div>
+  </div>
+  
+  <audio id="audio-click" src="https://cdn.pixabay.com/audio/2022/03/15/audio_24ae510798.mp3" preload="auto"></audio>
+  <audio id="bgm-horror" src="https://cdn.pixabay.com/audio/2022/11/22/audio_2c4a403487.mp3" loop></audio>
+  <audio id="bgm-detective" src="https://cdn.pixabay.com/audio/2022/08/04/audio_32b2494727.mp3" loop></audio>
+  <audio id="bgm-romance" src="https://cdn.pixabay.com/audio/2022/11/17/audio_855871141a.mp3" loop></audio>
+  <audio id="bgm-neutral" src="https://cdn.pixabay.com/audio/2022/08/03/audio_51cf5888a7.mp3" loop></audio>
+
+  <script>
+    // --- Diğer JavaScript kodları aynı ---
+    let playerName = "";
+    let isMuted = false;
+    let currentBgm = null;
+    let currentBgmType = null; 
+
+    const scenes = {
+      start_name: { text: "Gözlerini araladığında, etrafını saran sisin içinde fısıltılar duyuyorsun. Bir ses sana sesleniyor... Ama adını hatırlayamıyorsun. Senin adın neydi?", image: "https://images.unsplash.com/photo-1517045333153-a856352093da?q=80&w=1974", type: "neutral", isNameInput: true },
+      start: { text: "Aniden her şey netleşiyor. Adın {playerName}. Ve şimdi önünde üç farklı kader yolu uzanıyor. Hangisini seçeceksin?", image: "https://images.unsplash.com/photo-1469510360136-903932479421?q=80&w=2070", type: "neutral", choices: [ { text: "Tüyler ürpertici bir yola gir (Korku)", nextScene: "horror_1" }, { text: "Bir gizemin perdesini arala (Dedektiflik)", nextScene: "detective_1" }, { text: "Kalbinin sesini dinle (Aşk)", nextScene: "romance_1" }] },
+      horror_1: { text: "Ormanın derinliklerindesin, {playerName}. Dondurucu bir rüzgar yüzünü yalıyor. Uzaklardan, sanki yardım ister gibi zayıf bir çığlık duyuyorsun. Ne yaparsın?", image: "https://images.unsplash.com/photo-1475091493722-19231f4544f1?q=80&w=2070", type: "horror", choices: [{ text: "Sese doğru dikkatlice ilerle.", nextScene: "horror_2_cabin" }, { text: "Bu tekin değil. Geri dön ve uzaklaş.", nextScene: "horror_end_coward" }] },
+      horror_2_cabin: { text: "Çığlığın geldiği yöne ilerlediğinde, ağaçların arasında çürümeye yüz tutmuş eski bir kulübe beliriyor. Kapısı hafifçe aralık, içeriden solgun bir ışık sızıyor.", image: "https://images.unsplash.com/photo-1543353347-0a1f7a4d53a1?q=80&w=2070", type: "horror", choices: [{ text: "Gıcırdayan kapıyı itip içeri gir.", nextScene: "horror_3_inside" }, { text: "Önce pencerelerden birine göz at.", nextScene: "horror_3_window" }] },
+      horror_3_window: { text: "Tozlu pencereden içeri baktığında, odanın ortasında tek başına sallanan bir sandalye görüyorsun. Sandalyenin üzerinde eski bir oyuncak bebek var. Tam arkanı dönecekken, bebeğin başı yavaşça sana doğru dönüyor.", image: "https://images.unsplash.com/photo-1598140782556-c95a25a3a234?q=80&w=1974", type: "horror", choices: [{ text: "Korkuya rağmen içeri gir.", nextScene: "horror_3_inside" }, { text: "Çığlık atarak oradan kaç.", nextScene: "horror_end_coward" }] },
+      horror_3_inside: { text: "İçerisi küf ve hüzün kokuyor. Ortada sallanan sandalye, şömine ve duvarda solgun portreler... Sanki bu ev, bir anıyı tekrar tekrar yaşıyor. Nereden başlamalı?", image: "https://images.unsplash.com/photo-1562794359-1e98a149d80d?q=80&w=1964", type: "horror", choices: [{ text: "Şöminedeki külleri karıştır.", nextScene: "horror_4_fireplace" }, { text: "Duvardaki portreleri incele.", nextScene: "horror_4_portraits" }] },
+      horror_4_fireplace: { text: "Şöminenin külleri arasında yanmaktan son anda kurtulmuş bir fotoğraf parçası buluyorsun...", image: "https://images.unsplash.com/photo-1510934182434-c766e6624a64?q=80&w=2070", type: "horror", choices: [{ text: "Masadaki günlüğü ararım.", nextScene: "horror_5_diary" }] },
+      horror_4_portraits: { text: "Duvardaki portreler aynı ailenin üyeleri gibi. Gözleri seni takip ediyor. Son portreye baktığında kanın donuyor... Tozlu camın ardındaki o çocuksu yüz, senin yüzün, {playerName}.", image: "https://images.unsplash.com/photo-1618090664659-9943644d6561?q=80&w=1935", type: "horror", choices: [{ text: "Bu imkansız! Neler olduğunu anlamalıyım.", nextScene: "horror_5_diary" }] },
+      horror_5_diary: { text: "Odanın köşesindeki küçük masanın üzerinde, günlüğü buluyorsun. Deri kapağı yıpranmış. Titreyen ellerle ilk sayfasını açıyorsun.", image: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=1974", type: "horror", choices: [{ text: "Günlüğü oku.", nextScene: "horror_6_read_diary" }] },
+      horror_6_read_diary: { text: "Günlük, bu evde yaşayan bir çocuğun yalnızlığından bahsediyor. Son sayfada yazanlar ise tüylerini diken diken ediyor...", image: "https://images.unsplash.com/photo-1456381186718-d45e5a9a59a8?q=80&w=2070", type: "horror", choices: [{ text: "Bu bir lanet. Ruhu serbest bırakmalıyım.", nextScene: "horror_end_free" }, { text: "Bu sadece bir kabus. Her şeyin bitmesini bekle.", nextScene: "horror_end_loop" }] },
+      horror_end_coward: { text: "Koşabildiğin kadar hızlı koşuyorsun. Ormandan çıkmayı başarıyorsun ama o kulübenin görüntüsü aklından hiç çıkmıyor...", image: "https://images.unsplash.com/photo-1508781792902-3c8c08136367?q=80&w=2070", type: "horror", choices: [ { text: "Yeni bir hikayeye başla", nextScene: "start_name" }]},
+      horror_end_free: { text: "Günlüğü şömineye atıyorsun. Alevler günlüğü yutarken, odadan acı bir çığlık yükseliyor ve sonra... sessizlik. Dışarı adım attığında, sabah güneşi yüzünü ısıtıyor...", image: "https://images.unsplash.com/photo-1496937472095-2e01a8a38755?q=80&w=2070", type: "horror", choices: [ { text: "Yeni bir hikayeye başla", nextScene: "start_name" }]},
+      horror_end_loop: { text: "Gözlerini kapattığında, kendini yine ormanın derinliklerinde buluyorsun. Uzaklardan zayıf bir çığlık duyuluyor... Döngü yeniden başlıyor.", image: "https://images.unsplash.com/photo-1522108139311-b375b47194d2?q=80&w=1974", type: "horror", choices: [ { text: "Yeni bir hikayeye başla", nextScene: "start_name" }]},
+      detective_1: { text: "Londra, 1920. Ünlü bir mücevher çalındı. Scotland Yard'ın tek umudu sensin, Dedektif {playerName}. Olay yerindeki tek ipucu: lüks bir şapka.", image: "https://images.unsplash.com/photo-1509509682885-3e2815354707?q=80&w=2070", type: "detective", choices: [{ text: "Şehrin lüks barlarını araştır", nextScene: "detective_bar_enter" }, { text: "Müze ziyaretçi kayıtlarını incele", nextScene: "detective_museum" }] },
+      detective_bar_enter: { text: "Şehrin en şık ama bir o kadar da tekinsiz caz barı 'The Blue Note'a girdin. İçerisi puro dumanı ve fısıltılarla dolu.", image: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?q=80&w=1974", type: "detective", choices: [{ text: "Doğrudan barmene şapkayı sorarım.", nextScene: "detective_bar_ask" }]},
+      romance_1: { text: "Yağmurlu bir günde, bir kafede kitap okurken karşı masada oturan biriyle göz göze geliyorsun. Sana hafifçe gülümsüyor, {playerName}. Ne yaparsın?", image: "https://images.unsplash.com/photo-1511920183353-3c9c9b0a1d48?q=80&w=1974", type: "romance", choices: [{ text: "Cesaretimi toplayıp yanına giderim.", nextScene: "romance_approach" }, { text: "Gülümseyip kitabıma dönerim.", nextScene: "romance_wait" }] },
+      romance_approach: { text: "Yanına gittiğinde, 'O kitabı ben de çok severim,' diyor. Sohbetiniz anında başlıyor...", image: "https://images.unsplash.com/photo-1507915348366-a2713f41a1c9?q=80&w=1974", type: "romance", choices: [{ text: "Teklifi kabul ederim.", nextScene: "romance_walk" }] },
+      romance_wait: { text: "Kitabına dönsen de aklın onda kalıyor. Birkaç dakika sonra, kalkıp yanına geliyor...", image: "https://images.unsplash.com/photo-1497515114629-f71d767d0461?q=80&w=2070", type: "romance", choices: [{ text: "Gülümseyip sohbete katılırım.", nextScene: "romance_approach" }] },
+      romance_walk: { text: "Parkta yürürken yağmur hafifliyor ve gökkuşağı çıkıyor...", image: "https://images.unsplash.com/photo-1534533999434-53632aa1a72d?q=80&w=1974", type: "romance", choices: [{ text: "Elini tutup yanında olduğumu hissettiririm.", nextScene: "romance_support" }] },
+    };
+    
+    const startScreen = document.getElementById('start-screen');
+    const gameContent = document.getElementById('game-content');
+    const startButton = document.getElementById('start-button');
+    const storyTextElement = document.getElementById("story-text");
+    const storyImageElement = document.getElementById("story-image");
+    const choicesDiv = document.getElementById("choices");
+    const inputContainer = document.getElementById("input-container");
+    const nameInput = document.getElementById("name-input");
+    const submitNameButton = document.getElementById("submit-name-button");
+    const audioClick = document.getElementById("audio-click");
+    const bgm = { 
+        horror: document.getElementById("bgm-horror"), 
+        detective: document.getElementById("bgm-detective"), 
+        romance: document.getElementById("bgm-romance") 
+    };
+    let typeInterval;
+
+    function playBgm(type) {
+        if (!type || type === currentBgmType || type === "neutral") { return; }
+        if (currentBgm) { currentBgm.pause(); currentBgm.currentTime = 0; }
+        if (bgm[type]) {
+            currentBgm = bgm[type];
+            currentBgm.volume = 0.3;
+            if (!isMuted) { currentBgm.play(); }
+            currentBgmType = type;
+        } else {
+            currentBgm = null;
+            currentBgmType = null;
+        }
+    }
+    
+    function typeWriter(text, onComplete) {
+        clearInterval(typeInterval); 
+        storyTextElement.innerHTML = "";
+        let i = 0;
+        typeInterval = setInterval(() => {
+            if (i < text.length) { 
+                storyTextElement.innerHTML += text.charAt(i); 
+                i++; 
+            } else { 
+                clearInterval(typeInterval); 
+                if (onComplete) { 
+                    onComplete(); 
+                    choicesDiv.style.opacity = 1; 
+                } 
+            }
+        }, 25);
+    }
+    
+    // --- GÖRSEL GEÇİŞ SORUNUNU GİDERMEK İÇİN YENİLENDİ ---
+    function updateScene(sceneId) {
+        const scene = scenes[sceneId];
+        if (!scene) { 
+            console.error("Sahne bulunamadı:", sceneId);
+            return; 
+        }
+
+        // Önce seçimleri gizle
+        choicesDiv.style.opacity = 0;
+        inputContainer.style.display = 'none';
+
+        // Yeni görseli arka planda yükle
+        const preloader = new Image();
+        preloader.src = scene.image;
+
+        // Yükleme tamamlandığında geçişi ve içerik değişimini başlat
+        preloader.onload = () => {
+            // 1. Önceki görseli karart
+            storyImageElement.style.opacity = 0;
+
+            // 2. Kararma animasyonu bittikten sonra (800ms) her şeyi değiştir
+            setTimeout(() => {
+                storyImageElement.src = preloader.src; // Yeni görseli ata
+                storyImageElement.style.opacity = 1;  // Yeni görseli göster
+
+                // Metin ve seçenekleri şimdi güncelle
+                playBgm(scene.type);
+
+                if (scene.isNameInput) {
+                    choicesDiv.style.display = 'none';
+                    inputContainer.style.display = 'grid';
+                    typeWriter(scene.text);
+                    nameInput.focus();
+                } else {
+                    choicesDiv.style.display = 'grid';
+                    const personalizedText = scene.text.replace(/{playerName}/g, playerName);
+                    typeWriter(personalizedText, () => {
+                        choicesDiv.innerHTML = "";
+                        scene.choices.forEach(choice => {
+                            const button = document.createElement("button");
+                            button.innerText = choice.text; button.className = "choice-button";
+                            button.onclick = () => { if(!isMuted) audioClick.play(); updateScene(choice.nextScene); };
+                            choicesDiv.appendChild(button);
+                        });
+                    });
+                }
+            }, 800); // Bu süre CSS'deki --transition-speed ile aynı olmalı
+        };
+    }
+    
+    function submitName() {
+        const name = nameInput.value.trim();
+        if (name) { 
+            playerName = name; 
+            if(!isMuted) audioClick.play();
+            updateScene("start"); 
+        } else { 
+            alert("Lütfen bir isim gir!"); 
+        }
+    }
+
+    function startGame() {
+        Object.values(bgm).forEach(sound => { sound.play().catch(e => {}); sound.pause(); });
+        audioClick.play().catch(e => {}); audioClick.pause();
+        
+        if(!isMuted) audioClick.play();
+
+        startScreen.style.display = 'none';
+        gameContent.style.display = 'block';
+        updateScene("start_name");
+    }
+    
+    startButton.addEventListener('click', startGame);
+    submitNameButton.addEventListener('click', submitName);
+    nameInput.addEventListener('keyup', (event) => { if (event.key === 'Enter') submitName(); });
+
+    const muteButton = document.getElementById('mute-button');
+    const allAudios = document.querySelectorAll('audio');
+
+    muteButton.addEventListener('click', () => {
+        isMuted = !isMuted;
+        allAudios.forEach(audio => {
+            audio.muted = isMuted;
+        });
+        muteButton.innerHTML = isMuted ? '🔇' : '🔊';
+        if (!isMuted && currentBgm) {
+            currentBgm.play();
+        }
+    });
+  </script>
+</body>
+</html>
